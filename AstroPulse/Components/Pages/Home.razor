@@ -1,438 +1,852 @@
 ﻿@page "/"
 @rendermode InteractiveServer
-@using AstroPulse.Models
 @using System.Text.Json
 @implements IDisposable
 @inject IJSRuntime JS
 
-<main class="min-h-screen bg-[#070b11] text-slate-300 selection:bg-cyan-400/20 font-mono">
-    <header class="sticky top-0 z-20 border-b border-white/[.07] bg-[#080d14]/95 backdrop-blur-xl">
-        <div class="mx-auto flex max-w-[1600px] flex-wrap items-center justify-between gap-4 px-5 py-4 lg:px-8">
+<PageTitle>AstroPulse | Human Spaceflight Monitor</PageTitle>
+
+<main class="min-h-screen bg-[#070b11] text-slate-300 selection:bg-cyan-400/20">
+    <!-- PERSISTENT HEADER -->
+    <header class="sticky top-0 z-30 border-b border-white/[.08] bg-[#080d14]/95 shadow-[0_8px_28px_rgba(0,0,0,.2)] backdrop-blur-xl">
+        <div class="mx-auto flex max-w-[1600px] flex-wrap items-center justify-between gap-x-5 gap-y-3 px-4 py-3 sm:px-6 lg:px-8">
             <div class="flex items-center gap-3">
-                <div class="relative flex size-10 items-center justify-center rounded-xl border border-cyan-400/20 bg-cyan-400/[.06] text-cyan-300">
-                    <svg class="size-[22px]" fill="none" stroke="currentColor" stroke-width="1.4" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" /><path d="M2 12h20" /></svg>
+                <div class="relative flex size-10 shrink-0 items-center justify-center rounded-xl border border-cyan-400/20 bg-cyan-400/[.06] text-cyan-300">
+                    <span class="text-lg">◎</span>
                     <span class="absolute -right-0.5 -top-0.5 size-2 rounded-full bg-emerald-400 shadow-[0_0_9px_#34d399]"></span>
                 </div>
                 <div>
-                    <div class="flex items-baseline gap-2">
+                    <div class="flex flex-wrap items-baseline gap-2">
                         <h1 class="font-mono text-lg font-semibold tracking-[.14em] text-white">ASTROPULSE</h1>
                         <span class="hidden text-[9px] tracking-[.14em] text-slate-600 sm:block">HUMAN SPACEFLIGHT MONITOR</span>
                     </div>
-                    <p class="text-[9px] tracking-[.14em] text-slate-500">MISSION CONTROL <span class="text-slate-700">/</span> ARTEMIS DEEP SPACE SIM</p>
+                    <p class="text-[9px] tracking-[.12em] text-slate-500">MISSION CONTROL <span class="text-slate-700">/</span> ARTEMIS DEEP SPACE SIM</p>
                 </div>
             </div>
-            <div class="flex items-center gap-5">
-                <div class="hidden items-center gap-2 rounded-md border border-emerald-400/20 bg-emerald-400/[.05] px-3 py-2 sm:flex">
-                    <span class="relative flex size-2"><span class="absolute inline-flex size-full animate-ping rounded-full bg-emerald-400 opacity-50"></span><span class="relative inline-flex size-2 rounded-full bg-emerald-400"></span></span>
-                    <span class="text-[9px] tracking-[.14em] text-emerald-300">TELEMETRY LIVE</span>
+
+            <div class="flex flex-wrap items-center gap-2 sm:gap-3">
+                <div class="rounded-lg border border-white/[.08] bg-white/[.02] px-2.5 py-1.5">
+                    <span class="block text-[7px] tracking-[.12em] text-slate-600">MISSION ELAPSED</span>
+                    <span class="font-mono text-[10px] text-slate-200">@MissionElapsed</span>
                 </div>
-                <div class="flex items-center gap-2 font-mono text-xs text-slate-300">
-                    <svg class="size-[13px] text-cyan-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 16 14" /></svg>
-                    <time>@_snapshot.TimestampUtc.ToString("HH:mm:ss") <span class="text-slate-600">UTC</span></time>
+
+                <label class="flex flex-col gap-0.5">
+                    <span class="text-[7px] tracking-[.12em] text-slate-600">ENVIRONMENT</span>
+                    <select aria-label="Mission environment" value="@SelectedEnvironment" @onchange="OnEnvironmentChanged"
+                            class="max-w-[130px] rounded-md border border-white/10 bg-[#0b121b] px-2 py-1.5 text-[8px] tracking-[.08em] text-cyan-100 outline-none focus:border-cyan-300/40">
+                        @foreach (var opt in EnvironmentOptions)
+                        {
+                            <option value="@opt.Value">@opt.Label</option>
+                        }
+                    </select>
+                </label>
+
+                <div class="flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 @(IsOffline ? "border-amber-400/20 bg-amber-400/[.05]" : "border-cyan-400/15 bg-cyan-400/[.035]")">
+                    <span class="text-xs @(IsOffline ? "text-amber-300" : "text-cyan-300")">📡</span>
+                    <div>
+                        <span class="block text-[7px] tracking-[.1em] text-slate-600">EARTH LATENCY</span>
+                        <span class="font-mono text-[10px] @(IsOffline ? "text-amber-200" : "text-cyan-100")">
+                            @(LatencySeconds / 60)m @((LatencySeconds % 60).ToString("D2"))s
+                        </span>
+                    </div>
                 </div>
+
+                <div role="status" class="flex items-center gap-1.5 rounded-lg border px-2.5 py-2 @GetToneBorder(MasterTone) @GetToneBadge(MasterTone)">
+                    <span class="size-2 shrink-0 rounded-full @GetToneFill(MasterTone) @GetToneGlow(MasterTone) @(MasterTone == "red" ? "animate-pulse" : "")"></span>
+                    <span class="text-[8px] font-semibold tracking-[.08em]">
+                        @(MasterTone == "red" ? "CRITICAL" : MasterTone == "amber" ? "CAUTION" : "NOMINAL")
+                    </span>
+                </div>
+
+                <time class="hidden items-center gap-1.5 font-mono text-[9px] text-slate-500 xl:flex">
+                    <span>🕒</span>@(UtcTime)Z
+                </time>
             </div>
         </div>
+
+        <!-- TAB NAVIGATION -->
+        <nav aria-label="Mission views" class="mx-auto grid max-w-[1600px] grid-cols-4 gap-0 px-2 sm:flex sm:gap-1 sm:overflow-x-auto sm:px-6 lg:px-8">
+            @foreach (var tab in Tabs)
+            {
+                var isActive = ActiveTab == tab.Id;
+                <button type="button" @onclick="() => ActiveTab = tab.Id"
+                        class="relative flex min-w-0 items-center justify-center gap-1.5 border-b-2 px-1 py-3 text-[7px] font-semibold tracking-[.04em] transition-colors sm:flex-none sm:shrink-0 sm:gap-2 sm:px-3 sm:text-[9px] sm:tracking-[.08em] @(isActive ? "border-cyan-300 text-cyan-100" : "border-transparent text-slate-500 hover:text-slate-200")">
+                    <span>@tab.Icon</span>
+                    <span class="hidden sm:inline">@tab.Label</span>
+                    <span class="sm:hidden">@tab.ShortLabel</span>
+                </button>
+            }
+        </nav>
     </header>
 
-    <div class="mx-auto grid max-w-[1600px] gap-6 px-5 py-7 lg:grid-cols-[minmax(0,1fr)_330px] lg:px-8">
-        <section class="min-w-0">
-            <div class="mb-6 flex flex-wrap items-end justify-between gap-4">
-                <div>
-                    <div class="mb-2 flex items-center gap-2 text-[9px] tracking-[.2em] text-cyan-400"><span class="h-px w-5 bg-cyan-400"></span>FLIGHT DECK <span class="text-slate-700">—</span> FLIGHT DAY 184</div>
-                    <h2 class="text-2xl font-medium tracking-tight text-white sm:text-3xl">Crew health &amp; mission risk</h2>
-                    <p class="mt-1.5 text-xs text-slate-500">Five hazards. One crew. Continuous awareness.</p>
+    <!-- MAIN CONTENT CONTAINER -->
+    <div class="mx-auto max-w-[1600px] px-4 py-6 sm:px-6 lg:px-8">
+        <div class="mb-5 flex flex-wrap items-end justify-between gap-4">
+            <div>
+                <div class="mb-2 flex items-center gap-2 text-[9px] tracking-[.2em] text-cyan-400">
+                    <span class="h-px w-5 bg-cyan-400"></span>FLIGHT DECK <span class="text-slate-700">/</span> FLIGHT DAY 184 <span class="text-slate-700">/</span> CREW 02
                 </div>
-                <div class="flex items-center gap-2 rounded-lg border border-white/[.07] bg-white/[.02] px-3 py-2 text-[9px] tracking-[.12em] text-slate-500">
-                    <svg class="size-[13px] text-emerald-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M2 20h20M5 16l3-3 4 4 4-6 3 3" /></svg>ISS LINK <span class="text-emerald-300">CONNECTED</span>
-                </div>
+                <h2 class="text-2xl font-medium tracking-tight text-white sm:text-3xl">
+                    @Tabs.First(t => t.Id == ActiveTab).Label
+                </h2>
+                <p class="mt-1.5 text-xs text-slate-500">Human systems monitoring · Artemis deep space transit simulation</p>
             </div>
-
-            <!-- Simulation Control Deck -->
-            <section class="mb-6 rounded-xl border border-cyan-400/15 bg-gradient-to-r from-cyan-950/20 via-[#0b121b] to-[#0b121b] p-4 sm:p-5">
-                <div class="mb-4 flex items-center justify-between">
-                    <div class="flex items-center gap-2">
-                        <svg class="size-[14px] text-cyan-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="4 17 10 11 4 5" /><line x1="12" y1="19" x2="20" y2="19" /></svg>
-                        <h3 class="text-[10px] font-semibold tracking-[.17em] text-slate-200">SIMULATION CONTROL DECK</h3>
-                    </div>
-                    <span class="text-[9px] tracking-[.12em] text-slate-600">SANDBOX MODE <span class="text-cyan-400">●</span></span>
-                </div>
-                <div class="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-                    <button @onclick="TriggerSpe" class="flex min-h-11 items-center justify-center gap-2 rounded-lg border px-3 py-2 text-[10px] tracking-wide transition-colors @(_snapshot.SpaceRadiation.SolarParticleEventActive ? "border-red-400/30 bg-red-400/10 text-red-200" : "border-white/[.08] bg-[#080d14] text-slate-300 hover:border-red-400/30 hover:text-red-200")">
-                        <svg class="size-[14px]" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" /></svg>
-                        @(_snapshot.SpaceRadiation.SolarParticleEventActive ? "Solar Event Active · Reset" : "Trigger Solar Particle Event")
-                    </button>
-                    <button @onclick="CycleGravity" class="flex min-h-11 items-center justify-center gap-2 rounded-lg border border-white/[.08] bg-[#080d14] px-3 py-2 text-[10px] tracking-wide text-slate-300 transition-colors hover:border-cyan-400/30 hover:text-cyan-200">
-                        <svg class="size-[14px] text-cyan-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" /></svg>
-                        Cycle Gravity Mode <span class="text-cyan-300">@_snapshot.GravityFields.CurrentGravityMode</span>
-                    </button>
-                    <button @onclick="ToggleLight" class="flex min-h-11 items-center justify-center gap-2 rounded-lg border px-3 py-2 text-[10px] tracking-wide transition-colors @(_snapshot.IsolationConfinement.LightTherapyActive ? "border-amber-400/30 bg-amber-400/10 text-amber-200" : "border-white/[.08] bg-[#080d14] text-slate-300 hover:border-amber-400/30 hover:text-amber-200")">
-                        <svg class="size-[14px] @(_snapshot.IsolationConfinement.LightTherapyActive ? "text-amber-300" : "text-slate-500")" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="5" /><line x1="12" y1="1" x2="12" y2="3" /><line x1="12" y1="21" x2="12" y2="23" /><line x1="4.22" y1="4.22" x2="5.64" y2="5.64" /><line x1="18.36" y1="18.36" x2="19.78" y2="19.78" /><line x1="1" y1="12" x2="3" y2="12" /><line x1="21" y1="12" x2="23" y2="12" /><line x1="4.22" y1="19.78" x2="5.64" y2="18.36" /><line x1="18.36" y1="5.64" x2="19.78" y2="4.22" /></svg>
-                        @(_snapshot.IsolationConfinement.LightTherapyActive ? "Light Therapy · Active" : "Toggle Light Therapy")
-                    </button>
-                    <button @onclick="ExportMissionLog" class="flex min-h-11 items-center justify-center gap-2 rounded-lg border border-emerald-400/20 bg-emerald-400/[.05] px-3 py-2 text-[10px] tracking-wide text-emerald-300 transition-colors hover:bg-emerald-400/10">
-                        <svg class="size-[14px]" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
-                        Export Mission Log
-                    </button>
-                </div>
-            </section>
-
-            <div class="mb-3 flex items-center justify-between">
-                <div class="flex items-center gap-2">
-                    <svg class="size-[14px] text-cyan-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12" /></svg>
-                    <h3 class="text-[10px] font-semibold tracking-[.17em] text-slate-300">HUMAN SPACEFLIGHT HAZARDS</h3>
-                </div>
-                <span class="font-mono text-[9px] text-slate-600">05 SYSTEMS TRACKED</span>
+            <div class="flex items-center gap-2 rounded-lg border border-white/[.08] bg-white/[.02] px-3 py-2 text-[9px] tracking-[.1em] text-slate-500">
+                <span class="relative flex size-2">
+                    <span class="absolute inline-flex size-full animate-ping rounded-full bg-emerald-400 opacity-40"></span>
+                    <span class="relative size-2 rounded-full bg-emerald-400"></span>
+                </span>
+                SIMULATED TELEMETRY <span class="font-mono text-emerald-300">LIVE</span>
             </div>
+        </div>
 
-            <!-- 5 Hazards Grid Cards -->
-            <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-                
-                <!-- 1. Hostile Closed Environments -->
-                <article class="group relative overflow-hidden rounded-xl border border-emerald-400/20 bg-[#0b121b]/90 p-5">
-                    <div class="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent"></div>
-                    <div class="flex items-start justify-between gap-3">
-                        <div class="flex items-center gap-3">
-                            <div class="flex size-9 items-center justify-center rounded-lg border border-emerald-400/20 bg-white/[.025] text-emerald-300">
-                                <svg class="size-[17px]" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24"><path d="M9.59 4.59A2 2 0 1 1 11 8H2m10.59 11.41A2 2 0 1 0 14 16H2m15.73-8.27A2.5 2.5 0 1 1 19.5 12H2" /></svg>
-                            </div>
-                            <div>
-                                <p class="text-[10px] font-semibold tracking-[.16em] text-slate-100">HOSTILE ENVIRONMENTS</p>
-                                <p class="mt-1 text-[9px] tracking-[.12em] text-slate-600">CABIN SYSTEMS</p>
-                            </div>
-                        </div>
-                        <span class="flex items-center gap-1.5 rounded-full px-2 py-1 text-[8px] tracking-[.12em] bg-emerald-400/10 text-emerald-300">
-                            <span class="size-1.5 rounded-full bg-emerald-400"></span>NOMINAL
-                        </span>
-                    </div>
-                    <div class="mt-6 flex items-end gap-2">
-                        <span class="font-mono text-[34px] leading-none tracking-tight text-slate-50">@_snapshot.HostileEnvironment.CabinTempC.ToString("F1")</span>
-                        <span class="pb-0.5 font-mono text-xs text-emerald-300">°C</span>
-                    </div>
-                    <p class="mt-2 text-[10px] text-slate-500">Cabin Pressure: @_snapshot.HostileEnvironment.CabinPressureKpa kPa · Noise: @_snapshot.HostileEnvironment.NoiseDb dBA</p>
-                    <div class="mt-4 flex items-center justify-between border-t border-white/[.06] pt-3">
-                        <span class="text-[9px] tracking-[.12em] text-slate-600">MICROBIAL STRESS INDEX</span>
-                        <span class="font-mono text-[11px] text-emerald-300">@_snapshot.HostileEnvironment.MicrobialImmuneIndex / 100</span>
-                    </div>
-                    <div class="mt-4 flex items-center justify-between text-[9px] text-slate-600">
-                        <span>ECLSS Loop Active</span><span class="text-slate-700">LIVE</span>
-                    </div>
-                </article>
-
-                <!-- 2. Gravity Fields -->
-                <article class="group relative overflow-hidden rounded-xl border border-amber-400/20 bg-[#0b121b]/90 p-5">
-                    <div class="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent"></div>
-                    <div class="flex items-start justify-between gap-3">
-                        <div class="flex items-center gap-3">
-                            <div class="flex size-9 items-center justify-center rounded-lg border border-amber-400/20 bg-white/[.025] text-amber-300">
-                                <svg class="size-[17px]" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="4" /></svg>
-                            </div>
-                            <div>
-                                <p class="text-[10px] font-semibold tracking-[.16em] text-slate-100">GRAVITY FIELDS</p>
-                                <p class="mt-1 text-[9px] tracking-[.12em] text-slate-600">@_snapshot.GravityFields.CurrentGravityMode</p>
-                            </div>
-                        </div>
-                        <span class="flex items-center gap-1.5 rounded-full px-2 py-1 text-[8px] tracking-[.12em] bg-amber-400/10 text-amber-300">
-                            <span class="size-1.5 rounded-full bg-amber-400"></span>MONITOR
-                        </span>
-                    </div>
-                    <div class="mt-6 flex items-end gap-2">
-                        <span class="font-mono text-[34px] leading-none tracking-tight text-slate-50">@_snapshot.GravityFields.HeartRateBpm</span>
-                        <span class="pb-0.5 font-mono text-xs text-amber-300">bpm</span>
-                    </div>
-                    <p class="mt-2 text-[10px] text-slate-500">Hydration: @_snapshot.GravityFields.HydrationPercent% · ARED Protocol</p>
-                    <div class="mt-4 flex items-center justify-between border-t border-white/[.06] pt-3">
-                        <span class="text-[9px] tracking-[.12em] text-slate-600">BONE LOSS RATE</span>
-                        <span class="font-mono text-[11px] text-amber-300">−@_snapshot.GravityFields.MonthlyBoneLossRate% / mo</span>
-                    </div>
-                    <div class="mt-4 flex items-center justify-between text-[9px] text-slate-600">
-                        <span>Resistive exercise active</span><span class="text-slate-700">LIVE</span>
-                    </div>
-                </article>
-
-                <!-- 3. Distance From Earth -->
-                <article class="group relative overflow-hidden rounded-xl border border-emerald-400/20 bg-[#0b121b]/90 p-5">
-                    <div class="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent"></div>
-                    <div class="flex items-start justify-between gap-3">
-                        <div class="flex items-center gap-3">
-                            <div class="flex size-9 items-center justify-center rounded-lg border border-emerald-400/20 bg-white/[.025] text-emerald-300">
-                                <svg class="size-[17px]" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /><line x1="22" y1="12" x2="18" y2="12" /><line x1="6" y1="12" x2="2" y2="12" /><line x1="12" y1="6" x2="12" y2="2" /><line x1="12" y1="22" x2="12" y2="18" /></svg>
-                            </div>
-                            <div>
-                                <p class="text-[10px] font-semibold tracking-[.16em] text-slate-100">DISTANCE FROM EARTH</p>
-                                <p class="mt-1 text-[9px] tracking-[.12em] text-slate-600">DEEP SPACE</p>
-                            </div>
-                        </div>
-                        <span class="flex items-center gap-1.5 rounded-full px-2 py-1 text-[8px] tracking-[.12em] bg-emerald-400/10 text-emerald-300">
-                            <span class="size-1.5 rounded-full bg-emerald-400"></span>NOMINAL
-                        </span>
-                    </div>
-                    <div class="mt-6 flex items-end gap-2">
-                        <span class="font-mono text-[34px] leading-none tracking-tight text-slate-50">@_snapshot.DistanceFromEarth.DistanceMillionMiles.ToString("F1")</span>
-                        <span class="pb-0.5 font-mono text-xs text-emerald-300">M miles</span>
-                    </div>
-                    <p class="mt-2 text-[10px] text-slate-500">Autonomous Edge Routing Active</p>
-                    <div class="mt-4 flex items-center justify-between border-t border-white/[.06] pt-3">
-                        <span class="text-[9px] tracking-[.12em] text-slate-600">ONE-WAY COMMS DELAY</span>
-                        <span class="font-mono text-[11px] text-emerald-300">@_snapshot.DistanceFromEarth.OneWayCommsDelayMinutes.ToString("F1") min</span>
-                    </div>
-                    <div class="mt-4 flex items-center justify-between text-[9px] text-slate-600">
-                        <span>Signal strength −68 dBm</span><span class="text-slate-700">LIVE</span>
-                    </div>
-                </article>
-
-                <!-- 4. Isolation & Confinement -->
-                <article class="group relative overflow-hidden rounded-xl border border-amber-400/20 bg-[#0b121b]/90 p-5">
-                    <div class="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent"></div>
-                    <div class="flex items-start justify-between gap-3">
-                        <div class="flex items-center gap-3">
-                            <div class="flex size-9 items-center justify-center rounded-lg border border-amber-400/20 bg-white/[.025] text-amber-300">
-                                <svg class="size-[17px]" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="3" /></svg>
-                            </div>
-                            <div>
-                                <p class="text-[10px] font-semibold tracking-[.16em] text-slate-100">ISOLATION & CONFINEMENT</p>
-                                <p class="mt-1 text-[9px] tracking-[.12em] text-slate-600">CREW WELLNESS</p>
-                            </div>
-                        </div>
-                        <span class="flex items-center gap-1.5 rounded-full px-2 py-1 text-[8px] tracking-[.12em] bg-amber-400/10 text-amber-300">
-                            <span class="size-1.5 rounded-full bg-amber-400"></span>ELEVATED
-                        </span>
-                    </div>
-                    <div class="mt-6 flex items-end gap-2">
-                        <span class="font-mono text-[34px] leading-none tracking-tight text-slate-50">@_snapshot.IsolationConfinement.CircadianAlignmentPercent.ToString("F0")</span>
-                        <span class="pb-0.5 font-mono text-xs text-amber-300">%</span>
-                    </div>
-                    <p class="mt-2 text-[10px] text-slate-500">Circadian alignment index</p>
-                    <div class="mt-4 flex items-center justify-between border-t border-white/[.06] pt-3">
-                        <span class="text-[9px] tracking-[.12em] text-slate-600">WORKLOAD INDEX</span>
-                        <span class="font-mono text-[11px] text-amber-300">@_snapshot.IsolationConfinement.WorkloadIndex / 100</span>
-                    </div>
-                    <div class="mt-4 flex items-center justify-between text-[9px] text-slate-600">
-                        <span>Light therapy: @(_snapshot.IsolationConfinement.LightTherapyActive ? "ON" : "OFF")</span><span class="text-slate-700">LIVE</span>
-                    </div>
-                </article>
-
-                <!-- 5. Space Radiation -->
-                <article class="group relative overflow-hidden rounded-xl border @(_snapshot.SpaceRadiation.SolarParticleEventActive ? "border-red-400/50 bg-red-950/20" : "border-red-400/25") bg-[#0b121b]/90 p-5 md:col-span-2 xl:col-span-1">
-                    <div class="absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-white/10 to-transparent"></div>
-                    <div class="flex items-start justify-between gap-3">
-                        <div class="flex items-center gap-3">
-                            <div class="flex size-9 items-center justify-center rounded-lg border border-red-400/25 bg-white/[.025] text-red-300">
-                                <svg class="size-[17px]" fill="none" stroke="currentColor" stroke-width="1.6" viewBox="0 0 24 24"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /></svg>
-                            </div>
-                            <div>
-                                <p class="text-[10px] font-semibold tracking-[.16em] text-slate-100">SPACE RADIATION</p>
-                                <p class="mt-1 text-[9px] tracking-[.12em] text-slate-600">CSA NEUTRON SPECTROMETER</p>
-                            </div>
-                        </div>
-                        <span class="flex items-center gap-1.5 rounded-full px-2 py-1 text-[8px] tracking-[.12em] bg-red-400/10 text-red-300">
-                            <span class="size-1.5 rounded-full bg-red-400 animate-pulse"></span>@(_snapshot.SpaceRadiation.SolarParticleEventActive ? "SPE ACTIVE" : "NOMINAL")
-                        </span>
-                    </div>
-                    <div class="mt-6 flex items-end gap-2">
-                        <span class="font-mono text-[34px] leading-none tracking-tight text-slate-50">@_snapshot.SpaceRadiation.RadiationMicroSvPerHour.ToString("F1")</span>
-                        <span class="pb-0.5 font-mono text-xs text-red-300">µSv/h</span>
-                    </div>
-                    <p class="mt-2 text-[10px] text-slate-500">Neutron flux monitoring active</p>
-                    <div class="mt-4 flex items-center justify-between border-t border-white/[.06] pt-3">
-                        <span class="text-[9px] tracking-[.12em] text-slate-600">CUMULATIVE DOSE</span>
-                        <span class="font-mono text-[11px] text-red-300">@_snapshot.SpaceRadiation.CumulativeDoseMilliSv.ToString("F1") mSv</span>
-                    </div>
-                    <div class="mt-4 flex items-center justify-between text-[9px] text-slate-600">
-                        <span>Career limit 600 mSv</span><span class="text-slate-700">LIVE</span>
-                    </div>
-                </article>
-
-            </div>
-
-            <div class="mt-5 flex flex-wrap items-center justify-between gap-2 border-t border-white/[.06] pt-4 text-[9px] tracking-[.08em] text-slate-600">
-                <span class="flex items-center gap-2">DATA SIMULATION — NASA-STD-3001 &amp; HRP COMPLIANT</span>
-                <span>FEED LATENCY &lt; 250ms <span class="text-emerald-400">●</span></span>
-            </div>
-        </section>
-
-        <!-- Right Sidebar: Alerts & Countermeasures Feed -->
-        <aside class="flex flex-col gap-4">
-            <section class="rounded-xl border border-white/[.08] bg-[#0b121b] p-4">
-                <div class="mb-4 flex items-center justify-between">
-                    <div class="flex items-center gap-2">
-                        <div class="flex size-7 items-center justify-center rounded-lg border border-red-400/20 bg-red-400/[.07] text-red-300">
-                            <svg class="size-[14px]" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" /></svg>
-                        </div>
-                        <div>
-                            <h2 class="text-[10px] font-semibold tracking-[.14em] text-slate-100">ALERT FEED</h2>
-                            <p class="mt-0.5 text-[9px] text-slate-600">REAL-TIME MISSION EVENTS</p>
-                        </div>
-                    </div>
-                    <span class="rounded-full border border-red-400/20 bg-red-400/[.07] px-2 py-1 font-mono text-[9px] text-red-300">@_snapshot.ActiveAlerts.Count.ToString("D2") ACTIVE</span>
-                </div>
-
-                <div class="flex flex-col gap-3 max-h-[500px] overflow-y-auto pr-1">
-                    @if (_snapshot.ActiveAlerts.Any())
-                    {
-                        @foreach (var alert in _snapshot.ActiveAlerts)
-                        {
-                            <article class="rounded-lg border p-3 @GetAlertCardClass(alert.Severity)">
-                                <div class="mb-2 flex items-center justify-between">
-                                    <span class="flex items-center gap-2 text-[9px] tracking-[.12em] text-slate-300">
-                                        <span class="size-2 shrink-0 rounded-full @GetSeverityDotClass(alert.Severity)"></span>
-                                        @alert.Severity
-                                    </span>
-                                    <time class="font-mono text-[9px] text-slate-600">@alert.TriggeredAtUtc.ToString("HH:mm:ss")Z</time>
+        <!-- TAB 1: COMMAND & BODY MAP -->
+        @if (ActiveTab == "command")
+        {
+            <div class="flex flex-col gap-4">
+                <div class="grid gap-4 lg:grid-cols-2">
+                    <!-- INTERACTIVE BODY MAP -->
+                    <section class="rounded-xl border border-white/[.08] bg-[#0b121b] p-4 sm:p-5">
+                        <div class="mb-4 flex items-center justify-between gap-3">
+                            <div class="flex items-center gap-2.5">
+                                <span class="flex size-8 items-center justify-center rounded-lg border border-cyan-400/15 bg-cyan-400/[.04] text-cyan-300">🧬</span>
+                                <div>
+                                    <p class="text-[8px] tracking-[.14em] text-slate-600">HRP HUMAN SYSTEMS · CREW 02</p>
+                                    <h2 class="text-[11px] font-semibold tracking-[.1em] text-slate-100">Interactive body map</h2>
                                 </div>
-                                <h3 class="text-[11px] font-medium text-slate-200">@alert.NasaHrpRiskTitle</h3>
-                                <p class="mt-1.5 text-[10px] leading-relaxed text-slate-400">@alert.Description</p>
-                                <div class="mt-3 flex items-center gap-1.5 rounded-md px-2 py-1.5 text-[8px] tracking-[.08em] bg-black/30 border border-white/10 text-cyan-300">
-                                    <svg class="size-[11px]" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6" /></svg>
-                                    @alert.RecommendedCountermeasure
+                            </div>
+                            <span class="rounded-full bg-emerald-400/10 px-2 py-1 text-[8px] text-emerald-300">CREW 02</span>
+                        </div>
+
+                        <!-- ANATOMY CANVAS -->
+                        <div class="relative mx-auto h-[300px] max-w-[480px] overflow-hidden rounded-lg border border-white/[.05] bg-[radial-gradient(ellipse_at_50%_48%,rgba(34,211,238,.08),transparent_60%)]">
+                            <div aria-hidden="true" class="absolute inset-0 opacity-40"
+                                 style="background-image: linear-gradient(rgba(148,163,184,.07) 1px, transparent 1px),linear-gradient(90deg,rgba(148,163,184,.07) 1px,transparent 1px); background-size: 24px 24px;"></div>
+                            <div aria-hidden="true" class="absolute left-1/2 top-1/2 h-[246px] w-[120px] -translate-x-1/2 -translate-y-1/2">
+                                <div class="absolute left-1/2 top-1 h-[44px] w-[42px] -translate-x-1/2 rounded-[48%] border border-cyan-300/30 bg-cyan-400/[.07]"></div>
+                                <div class="absolute left-1/2 top-[51px] h-[79px] w-[70px] -translate-x-1/2 rounded-[38%_38%_26%_26%] border border-cyan-300/25 bg-cyan-400/[.06]"></div>
+                                <div class="absolute left-[2px] top-[58px] h-[106px] w-[22px] -rotate-[12deg] rounded-full border border-cyan-300/20 bg-cyan-400/[.04]"></div>
+                                <div class="absolute right-[2px] top-[58px] h-[106px] w-[22px] rotate-[12deg] rounded-full border border-cyan-300/20 bg-cyan-400/[.04]"></div>
+                                <div class="absolute left-[27px] top-[121px] h-[111px] w-[25px] -rotate-[4deg] rounded-b-xl rounded-t-md border border-cyan-300/20 bg-cyan-400/[.04]"></div>
+                                <div class="absolute right-[27px] top-[121px] h-[111px] w-[25px] rotate-[4deg] rounded-b-xl rounded-t-md border border-cyan-300/20 bg-cyan-400/[.04]"></div>
+                                <div class="absolute left-[43px] top-[67px] size-3 rounded-full border border-rose-300/60 bg-rose-400/25 shadow-[0_0_12px_rgba(251,113,133,.5)]"></div>
+                                <div class="absolute left-[47px] top-[92px] h-7 w-6 rounded-full border border-amber-300/50 bg-amber-400/15"></div>
+                                <div class="absolute left-[48px] top-[31px] size-2 rounded-full bg-cyan-300/70 shadow-[0_0_10px_#67e8f9]"></div>
+                            </div>
+
+                            @foreach (var reg in MapButtons)
+                            {
+                                var isSel = SelectedRegion == reg.Name;
+                                <button type="button" @onclick="() => SelectedRegion = reg.Name"
+                                        class="absolute @reg.Position z-10 flex items-center gap-1.5 rounded-full border px-2.5 py-1.5 text-[8px] tracking-[.08em] transition-colors @(isSel ? "border-cyan-300/45 bg-cyan-300/15 text-cyan-100" : "border-white/10 bg-[#080d14]/90 text-slate-400 hover:border-cyan-300/30 hover:text-cyan-100")">
+                                    <span>@reg.Icon</span>@reg.Short
+                                </button>
+                            }
+
+                            <div class="absolute bottom-3 left-3 flex items-center gap-2 text-[8px] tracking-[.12em] text-slate-600">
+                                <span class="size-1.5 rounded-full bg-cyan-300 shadow-[0_0_7px_#67e8f9]"></span>REGION SELECT · SIMULATED
+                            </div>
+                        </div>
+
+                        @{
+                            var currentRegion = RegionDetails[SelectedRegion];
+                        }
+                        <div class="mt-3 rounded-lg border @GetToneBorder(currentRegion.Status) bg-white/[.02] p-3">
+                            <div class="flex items-start gap-3">
+                                <span class="flex size-8 shrink-0 items-center justify-center rounded-lg @GetToneBadge(currentRegion.Status)">
+                                    @currentRegion.Icon
+                                </span>
+                                <div>
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <h3 class="text-xs font-medium text-white">@SelectedRegion</h3>
+                                        <span class="flex items-center gap-1.5 rounded-full px-2 py-0.5 text-[8px] @GetToneBadge(currentRegion.Status)">
+                                            <span class="size-1.5 rounded-full @GetToneFill(currentRegion.Status)"></span>
+                                            @currentRegion.Status.ToUpper()
+                                        </span>
+                                    </div>
+                                    <p class="mt-1 text-[10px] text-slate-400">@currentRegion.Summary</p>
+                                </div>
+                            </div>
+                            <div class="mt-3 grid gap-3 border-t border-white/[.06] pt-3 sm:grid-cols-2">
+                                <div>
+                                    <p class="text-[8px] tracking-[.12em] text-slate-600">SPACEFLIGHT IMPACT</p>
+                                    <p class="mt-1 text-[9px] leading-relaxed text-slate-400">@currentRegion.Impact</p>
+                                </div>
+                                <div>
+                                    <p class="text-[8px] tracking-[.12em] text-slate-600">COUNTERMEASURE</p>
+                                    <p class="mt-1 text-[9px] leading-relaxed text-slate-400">@currentRegion.Action</p>
+                                </div>
+                            </div>
+                        </div>
+                        <p class="mt-2 flex items-center gap-1.5 text-[8px] text-slate-600">ⓘ Simulated physiology context; not a clinical diagnosis.</p>
+                    </section>
+
+                    <!-- ASTROAI EDGE ADVISOR -->
+                    <section class="rounded-xl border border-white/[.08] bg-[#0b121b] p-4 sm:p-5">
+                        <div class="mb-4 flex items-center justify-between gap-3">
+                            <div class="flex items-center gap-2.5">
+                                <span class="flex size-8 items-center justify-center rounded-lg border border-cyan-400/15 bg-cyan-400/[.04] text-cyan-300">📡</span>
+                                <div>
+                                    <p class="text-[8px] tracking-[.14em] text-slate-600">EARTH LINK · DELAY AWARE</p>
+                                    <h2 class="text-[11px] font-semibold tracking-[.1em] text-slate-100">AstroAI edge advisor</h2>
+                                </div>
+                            </div>
+                            <span class="flex items-center gap-1.5 rounded-full px-2 py-1 text-[8px] @(IsOffline ? GetToneBadge("amber") : GetToneBadge("green"))">
+                                <span class="size-1.5 rounded-full @(IsOffline ? GetToneFill("amber") : GetToneFill("green"))"></span>
+                                @(IsOffline ? "EDGE ACTIVE" : "LINKED")
+                            </span>
+                        </div>
+
+                        <div class="rounded-lg border p-3 @(IsOffline ? "border-amber-400/20 bg-amber-400/[.04]" : "border-emerald-400/15 bg-emerald-400/[.025]")">
+                            <p class="text-[10px] font-semibold tracking-[.06em] @(IsOffline ? "text-amber-200" : "text-emerald-200")">
+                                @(IsOffline ? "OFFLINE: AUTONOMOUS EDGE OVERRIDE ACTIVE" : "LINKED · EARTH MISSION CONTROL")
+                            </p>
+                            <p class="mt-1 text-[9px] text-slate-500">
+                                @(IsOffline ? "One-way comms delay exceeds the 20-minute autonomy threshold." : "Earth link nominal · autonomous crew procedures remain on standby.")
+                            </p>
+                        </div>
+
+                        <div class="mt-3 flex items-start gap-2.5">
+                            <span class="flex size-7 shrink-0 items-center justify-center rounded-lg border border-cyan-300/15 bg-cyan-300/[.06] text-cyan-300">✨</span>
+                            <div>
+                                <p class="text-[10px] font-medium text-slate-200">@(IsOffline ? "Local remediation directives" : "Crew decision support")</p>
+                                <ul class="mt-2 flex flex-col gap-2 text-[9px] leading-relaxed text-slate-400">
+                                    <li class="flex gap-2">
+                                        <span class="font-mono text-cyan-400">01</span>
+                                        @(IsOffline ? "Execute onboard radiation shelter checklist; verify dosimeter trend locally." : "Review the active radiation alert and confirm crew shelter readiness.")
+                                    </li>
+                                    <li class="flex gap-2">
+                                        <span class="font-mono text-cyan-400">02</span>
+                                        @(IsOffline ? "Continue prescribed resistance protocol; record symptoms in the daily health log." : "Flight surgeon remains available for non-urgent consultation while linked.")
+                                    </li>
+                                    <li class="flex gap-2">
+                                        <span class="font-mono text-cyan-400">03</span>
+                                        @(IsOffline ? "Queue non-urgent telemetry for transmission when Earth link recovers." : "Autonomous guidance threshold: 1,200 seconds one-way delay.")
+                                    </li>
+                                </ul>
+                            </div>
+                        </div>
+
+                        <button type="button" @onclick="ToggleLatency"
+                                class="mt-4 flex min-h-9 w-full items-center justify-center gap-2 rounded-lg border border-white/[.08] bg-[#080d14] px-3 text-[9px] tracking-[.08em] text-slate-300 hover:border-cyan-300/25 hover:text-cyan-100">
+                            @(IsOffline ? "RESTORE SIMULATED EARTH LINK" : "SIMULATE >20 MIN LATENCY")
+                        </button>
+                        <p class="mt-2 text-center text-[8px] text-slate-700">Rule-based demo only · not a medical device or validated AI system.</p>
+                    </section>
+                </div>
+
+                <!-- MISSION ALERTS -->
+                <section class="rounded-xl border border-white/[.08] bg-[#0b121b] p-4">
+                    <div class="mb-4 flex items-center justify-between gap-3">
+                        <div class="flex items-center gap-2.5">
+                            <span class="flex size-8 items-center justify-center rounded-lg border border-cyan-400/15 bg-cyan-400/[.04] text-cyan-300">⚠️</span>
+                            <div>
+                                <p class="text-[8px] tracking-[.14em] text-slate-600">REAL-TIME · LOCAL SIMULATION</p>
+                                <h2 class="text-[11px] font-semibold tracking-[.1em] text-slate-100">Mission alerts</h2>
+                            </div>
+                        </div>
+                        <span class="rounded-full px-2 py-1 font-mono text-[8px] @GetToneBadge(MasterTone)">@ActiveAlertCount.ToString("D2") OPEN</span>
+                    </div>
+
+                    <div class="grid gap-2.5 md:grid-cols-3">
+                        @foreach (var alert in Alerts.Take(3))
+                        {
+                            <article class="rounded-lg border p-3 @GetToneBorder(alert.Tone) @(alert.Tone == "red" ? "bg-rose-400/[.025]" : alert.Tone == "amber" ? "bg-amber-400/[.025]" : "bg-emerald-400/[.025]")">
+                                <div class="mb-2 flex items-center justify-between">
+                                    <span class="flex items-center gap-2 text-[8px] tracking-[.12em] text-slate-300">
+                                        <span class="size-2 rounded-full @GetToneFill(alert.Tone)"></span>
+                                        @(alert.Tone == "red" ? "CRITICAL" : alert.Tone == "amber" ? "CAUTION" : "CLEARED")
+                                    </span>
+                                    <time class="font-mono text-[8px] text-slate-600">@(alert.Time)Z</time>
+                                </div>
+                                <h3 class="text-[10px] font-medium text-slate-200">@alert.Title</h3>
+                                <p class="mt-1 text-[9px] leading-relaxed text-slate-500">@alert.Body</p>
+                                <div class="mt-2 flex items-center gap-1 rounded px-2 py-1.5 text-[8px] @GetToneBadge(alert.Tone)">
+                                    <span>›</span>@alert.Action
                                 </div>
                             </article>
                         }
-                    }
-                    else
-                    {
-                        <div class="text-center text-slate-500 py-10 text-xs">
-                            <p>All telemetry parameters nominal.</p>
-                            <p class="text-[10px] mt-1">No active HRP hazard alerts triggered.</p>
-                        </div>
-                    }
-                </div>
-            </section>
+                    </div>
+                </section>
 
-            <!-- Countermeasures Quick Deck -->
-            <section class="rounded-xl border border-white/[.08] bg-[#0b121b] p-4">
-                <div class="mb-3 flex items-center gap-2">
-                    <svg class="size-[14px] text-cyan-400" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48l2.83-2.83" /></svg>
-                    <h2 class="text-[10px] font-semibold tracking-[.14em] text-slate-200">COUNTERMEASURES</h2>
-                </div>
-                <div class="flex flex-col gap-2">
-                    <div class="flex items-start gap-2.5 rounded-lg border border-red-400/15 bg-red-400/[.025] p-3">
-                        <span class="size-2 shrink-0 rounded-full bg-red-400 mt-0.5"></span>
+                <!-- NASA HRP FIVE HAZARDS -->
+                <section class="rounded-xl border border-white/[.08] bg-[#0b121b] p-4">
+                    <div class="mb-4 flex items-center gap-2.5">
+                        <span class="flex size-8 items-center justify-center rounded-lg border border-cyan-400/15 bg-cyan-400/[.04] text-cyan-300">🛡️</span>
                         <div>
-                            <p class="text-[10px] text-slate-200">Radiation storm shelter protocol</p>
-                            <p class="mt-1 text-[9px] leading-relaxed text-slate-500">Relocate crew to water/polyethylene shielded quarters.</p>
+                            <p class="text-[8px] tracking-[.14em] text-slate-600">NASA HRP · FIVE HAZARDS</p>
+                            <h2 class="text-[11px] font-semibold tracking-[.1em] text-slate-100">Risk watch</h2>
                         </div>
                     </div>
-                    <div class="flex items-start gap-2.5 rounded-lg border border-amber-400/15 bg-amber-400/[.025] p-3">
-                        <span class="size-2 shrink-0 rounded-full bg-amber-400 mt-0.5"></span>
-                        <div>
-                            <p class="text-[10px] text-slate-200">Bone density maintenance</p>
-                            <p class="mt-1 text-[9px] leading-relaxed text-slate-500">Enforce 2-hour daily ARED resistive exercise session.</p>
+                    <div class="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-5">
+                        <div class="rounded-lg border border-white/[.06] bg-[#080d14] p-3">
+                            <p class="text-[8px] tracking-[.12em] text-slate-600">SPACE RADIATION</p>
+                            <p class="mt-1 text-xs font-medium text-white">@(SolarEvent ? "SPE Warning Flux" : "CSA CANS Flux Active")</p>
+                            <p class="mt-1 text-[9px] text-slate-500">@(SolarEvent ? "Storm cellar protocol active" : "Shielding posture nominal")</p>
+                        </div>
+                        <div class="rounded-lg border border-white/[.06] bg-[#080d14] p-3">
+                            <p class="text-[8px] tracking-[.12em] text-slate-600">ISOLATION</p>
+                            <p class="mt-1 text-xs font-medium text-white">Day 184 In Transit</p>
+                            <p class="mt-1 text-[9px] text-slate-500">Circadian rhythms steady</p>
+                        </div>
+                        <div class="rounded-lg border border-white/[.06] bg-[#080d14] p-3">
+                            <p class="text-[8px] tracking-[.12em] text-slate-600">DISTANCE / LATENCY</p>
+                            <p class="mt-1 text-xs font-medium text-white">@(LatencySeconds / 60) min @(LatencySeconds % 60) sec</p>
+                            <p class="mt-1 text-[9px] text-slate-500">@(IsOffline ? "Autonomous edge active" : "Comms link nominal")</p>
+                        </div>
+                        <div class="rounded-lg border border-white/[.06] bg-[#080d14] p-3">
+                            <p class="text-[8px] tracking-[.12em] text-slate-600">GRAVITY FIELDS</p>
+                            <p class="mt-1 text-xs font-medium text-white">@(MicrogravityShift ? "Microgravity Override" : "Deep Space Transit")</p>
+                            <p class="mt-1 text-[9px] text-slate-500">Countermeasures active</p>
+                        </div>
+                        <div class="rounded-lg border border-white/[.06] bg-[#080d14] p-3">
+                            <p class="text-[8px] tracking-[.12em] text-slate-600">CLOSED ENVIRONMENT</p>
+                            <p class="mt-1 text-xs font-medium text-white">ECLSS Nominal</p>
+                            <p class="mt-1 text-[9px] text-slate-500">Acoustics and air balanced</p>
                         </div>
                     </div>
-                </div>
-            </section>
+                </section>
+            </div>
+        }
 
-            <!-- Mission Snapshot -->
-            <section class="rounded-xl border border-cyan-400/15 bg-gradient-to-br from-cyan-950/20 to-[#0b121b] p-4">
-                <div class="mb-3 flex items-center gap-2">
-                    <svg class="size-[14px] text-cyan-300" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /><polyline points="12 6 12 12 15 15" /></svg>
-                    <h2 class="text-[10px] font-semibold tracking-[.14em] text-slate-200">MISSION SNAPSHOT</h2>
+        <!-- TAB 2: CREW VITALS & CHECK-IN -->
+        @if (ActiveTab == "vitals")
+        {
+            <div class="grid items-start gap-4 lg:grid-cols-[1fr_380px]">
+                <section class="rounded-xl border border-white/[.08] bg-[#0b121b] p-4 sm:p-5">
+                    <div class="mb-4 flex items-center gap-2.5">
+                        <span class="flex size-8 items-center justify-center rounded-lg border border-cyan-400/15 bg-cyan-400/[.04] text-cyan-300">❤️</span>
+                        <div>
+                            <p class="text-[8px] tracking-[.14em] text-slate-600">CREW 02 · DAILY ENTRY</p>
+                            <h2 class="text-[11px] font-semibold tracking-[.1em] text-slate-100">Manual health indicator logging</h2>
+                        </div>
+                    </div>
+
+                    <EditForm Model="@CurrentEntry" OnValidSubmit="SaveHealthLog" class="grid gap-x-4 gap-y-4 sm:grid-cols-2">
+                        <label class="flex flex-col gap-1.5">
+                            <span class="flex items-center justify-between text-[10px] text-slate-300">Blood pressure *<span class="text-[9px] text-slate-600">mmHg · SYS / DIA</span></span>
+                            <InputText @bind-Value="CurrentEntry.BloodPressure" required placeholder="118/76"
+                                       class="h-10 rounded-lg border border-white/10 bg-[#080d14] px-3 font-mono text-xs text-white outline-none placeholder:text-slate-700 focus:border-cyan-300/40" />
+                        </label>
+
+                        <label class="flex flex-col gap-1.5">
+                            <span class="flex items-center justify-between text-[10px] text-slate-300">Heart rate *<span class="text-[9px] text-slate-600">BPM</span></span>
+                            <InputText @bind-Value="CurrentEntry.HeartRate" required type="number" min="30" max="220" placeholder="64"
+                                       class="h-10 rounded-lg border border-white/10 bg-[#080d14] px-3 font-mono text-xs text-white outline-none placeholder:text-slate-700 focus:border-cyan-300/40" />
+                        </label>
+
+                        <label class="flex flex-col gap-1.5">
+                            <span class="flex items-center justify-between text-[10px] text-slate-300">Blood glucose<span class="text-[9px] text-slate-600">mg/dL</span></span>
+                            <InputText @bind-Value="CurrentEntry.BloodSugar" type="number" step="0.1" placeholder="92"
+                                       class="h-10 rounded-lg border border-white/10 bg-[#080d14] px-3 font-mono text-xs text-white outline-none placeholder:text-slate-700 focus:border-cyan-300/40" />
+                        </label>
+
+                        <label class="flex flex-col gap-1.5">
+                            <span class="flex items-center justify-between text-[10px] text-slate-300">Body temperature<span class="text-[9px] text-slate-600">°C</span></span>
+                            <InputText @bind-Value="CurrentEntry.Temperature" type="number" step="0.1" placeholder="36.7"
+                                       class="h-10 rounded-lg border border-white/10 bg-[#080d14] px-3 font-mono text-xs text-white outline-none placeholder:text-slate-700 focus:border-cyan-300/40" />
+                        </label>
+
+                        <label class="flex flex-col gap-1.5">
+                            <span class="flex items-center justify-between text-[10px] text-slate-300">Sleep duration<span class="text-[9px] text-slate-600">HOURS</span></span>
+                            <InputText @bind-Value="CurrentEntry.Sleep" type="number" step="0.1" placeholder="7.5"
+                                       class="h-10 rounded-lg border border-white/10 bg-[#080d14] px-3 font-mono text-xs text-white outline-none placeholder:text-slate-700 focus:border-cyan-300/40" />
+                        </label>
+
+                        <label class="flex flex-col gap-1.5">
+                            <span class="flex items-center justify-between text-[10px] text-slate-300">Actigraphy / activity<span class="text-[9px] text-slate-600">STEPS OR MIN</span></span>
+                            <InputText @bind-Value="CurrentEntry.Actigraphy" type="number" placeholder="6240"
+                                       class="h-10 rounded-lg border border-white/10 bg-[#080d14] px-3 font-mono text-xs text-white outline-none placeholder:text-slate-700 focus:border-cyan-300/40" />
+                        </label>
+
+                        <label class="flex flex-col gap-1.5">
+                            <span class="text-[10px] text-slate-300">Mood &amp; behavioral status</span>
+                            <InputSelect @bind-Value="CurrentEntry.Mood"
+                                         class="h-10 rounded-lg border border-white/10 bg-[#080d14] px-3 text-xs text-white outline-none focus:border-cyan-300/40">
+                                <option value="">Select check-in</option>
+                                <option value="Positive">Positive</option>
+                                <option value="Steady">Steady</option>
+                                <option value="Low energy">Low energy</option>
+                                <option value="Stressed">Stressed</option>
+                                <option value="Prefer to discuss privately">Prefer to discuss privately</option>
+                            </InputSelect>
+                        </label>
+
+                        <label class="flex flex-col gap-1.5">
+                            <span class="text-[10px] text-slate-300">Optional notes</span>
+                            <InputText @bind-Value="CurrentEntry.Notes" maxlength="240" placeholder="Symptoms or follow-up"
+                                       class="h-10 rounded-lg border border-white/10 bg-[#080d14] px-3 text-xs text-white outline-none placeholder:text-slate-700 focus:border-cyan-300/40" />
+                        </label>
+
+                        <button type="submit"
+                                class="flex min-h-10 items-center justify-center gap-2 rounded-lg border border-cyan-300/25 bg-cyan-300/[.08] px-4 text-[10px] font-semibold tracking-[.12em] text-cyan-100 transition-colors hover:bg-cyan-300/[.14] sm:col-span-2">
+                            ✓ SAVE DAILY CHECK-IN
+                        </button>
+                        <p class="text-[9px] leading-relaxed text-slate-600 sm:col-span-2">
+                            Required: blood pressure and heart rate. Logs stay in this session; export a JSON copy from the Surgeon Logs tab.
+                        </p>
+                    </EditForm>
+                </section>
+
+                <div class="flex flex-col gap-4">
+                    <section class="rounded-xl border border-white/[.08] bg-[#0b121b] p-4">
+                        <div class="mb-3 flex items-center gap-2.5">
+                            <span class="flex size-8 items-center justify-center rounded-lg border border-cyan-400/15 bg-cyan-400/[.04] text-cyan-300">✨</span>
+                            <div>
+                                <p class="text-[8px] tracking-[.14em] text-slate-600">WELLNESS &amp; STREAK</p>
+                                <h2 class="text-[11px] font-semibold tracking-[.1em] text-slate-100">Readiness tracker</h2>
+                            </div>
+                        </div>
+                        <div class="rounded-lg border border-emerald-400/20 bg-emerald-400/[.04] p-4 text-center">
+                            <p class="font-mono text-3xl font-semibold text-emerald-300">@(184 + Logs.Count) DAYS</p>
+                            <p class="mt-1 text-[10px] uppercase tracking-[.12em] text-emerald-200/80">Continuous Streak · Crew 02</p>
+                            <p class="mt-2 text-[9px] leading-relaxed text-slate-400">
+                                All daily health indicator checks and countermeasures completed successfully for the mission segment.
+                            </p>
+                        </div>
+                    </section>
+
+                    <section class="rounded-xl border border-white/[.08] bg-[#0b121b] p-4">
+                        <div class="mb-3 flex items-center gap-2.5">
+                            <span class="flex size-8 items-center justify-center rounded-lg border border-cyan-400/15 bg-cyan-400/[.04] text-cyan-300">ⓘ</span>
+                            <div>
+                                <p class="text-[8px] tracking-[.14em] text-slate-600">EDUCATIONAL CONTEXT</p>
+                                <h2 class="text-[11px] font-semibold tracking-[.1em] text-slate-100">Why track vitals in deep space?</h2>
+                            </div>
+                        </div>
+                        <div class="flex flex-col gap-2.5 text-[9px] leading-relaxed text-slate-400">
+                            <p><strong class="text-slate-200">Fluid Shifts:</strong> In microgravity, blood and interstitial fluids shift toward the upper body, altering blood pressure and cardiovascular response.</p>
+                            <p><strong class="text-slate-200">Bone Mineral Density:</strong> Lack of axial loading can lead to bone mineral density reduction; daily resistance sessions help mitigate this.</p>
+                            <p><strong class="text-slate-200">Circadian Hygiene:</strong> Artificial lighting requires intentional sleep tracking and mood logging to support behavioral health.</p>
+                        </div>
+                    </section>
                 </div>
-                <div class="grid grid-cols-2 gap-3">
-                    <div>
-                        <p class="text-[8px] tracking-[.12em] text-slate-600">CREW ONBOARD</p>
-                        <p class="mt-1 font-mono text-lg text-white">04 <span class="text-[9px] text-slate-500">/ 04</span></p>
+            </div>
+        }
+
+        <!-- TAB 3: TELEMETRY & TRENDS -->
+        @if (ActiveTab == "telemetry")
+        {
+            <section class="rounded-xl border border-white/[.08] bg-[#0b121b] p-4 sm:p-5">
+                <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+                    <div class="flex items-center gap-2.5">
+                        <span class="flex size-8 items-center justify-center rounded-lg border border-cyan-400/15 bg-cyan-400/[.04] text-cyan-300">📈</span>
+                        <div>
+                            <p class="text-[8px] tracking-[.14em] text-slate-600">REAL-TIME TELEMETRY STREAM</p>
+                            <h2 class="text-[11px] font-semibold tracking-[.1em] text-slate-100">Habitat metrics &amp; radiation flux</h2>
+                        </div>
                     </div>
-                    <div>
-                        <p class="text-[8px] tracking-[.12em] text-slate-600">MISSION ELAPSED</p>
-                        <p class="mt-1 font-mono text-lg text-white">184<span class="text-[9px] text-slate-500">d</span> 06<span class="text-[9px] text-slate-500">h</span></p>
+
+                    <div class="flex flex-wrap items-center gap-2">
+                        <button type="button" @onclick="ToggleSolarEvent"
+                                class="rounded-lg border px-3 py-1.5 text-[9px] tracking-[.08em] @(SolarEvent ? "border-rose-400/40 bg-rose-400/20 text-rose-200 shadow-[0_0_10px_rgba(251,113,133,.25)]" : "border-white/10 bg-[#080d14] text-slate-300 hover:border-cyan-300/30")">
+                            ☢️ @(SolarEvent ? "SOLAR EVENT SIM ACTIVE" : "TRIGGER SOLAR PARTICLE EVENT")
+                        </button>
+                        <button type="button" @onclick="ToggleMicrogravity"
+                                class="rounded-lg border px-3 py-1.5 text-[9px] tracking-[.08em] @(MicrogravityShift ? "border-amber-400/40 bg-amber-400/20 text-amber-200" : "border-white/10 bg-[#080d14] text-slate-300 hover:border-cyan-300/30")">
+                            🌀 @(MicrogravityShift ? "MICROGRAVITY PROFILE" : "SIMULATE GRAVITY SHIFT")
+                        </button>
                     </div>
+                </div>
+
+                <!-- 4 DYNAMIC HIGH-PRECISION SPARKLINE CHARTS MATCHING REFERENCE -->
+                <div class="grid gap-3 sm:grid-cols-2">
+                    @RenderChartCard("CABIN PRESSURE", "kPa", "#34d399", 98, 104, s => s.Pressure, "F1", SolarEvent ? "amber" : "green")
+                    @RenderChartCard("CABIN TEMPERATURE", "°C", "#22d3ee", 19, 25, s => s.Temperature, "F2", "cyan")
+                    @RenderChartCard("ACOUSTIC LEVEL", "dBA", "#fbbf24", 40, 70, s => s.Acoustics, "F2", MicrogravityShift ? "amber" : "amber")
+                    @RenderChartCard("CSA CANS NEUTRON FLUX", "n/cm²/s", "#fb7185", 0, 50.0, s => s.Radiation, "F1", SolarEvent ? "red" : "rose")
                 </div>
             </section>
-        </aside>
+        }
+
+        <!-- TAB 4: FLIGHT SURGEON LOGS -->
+        @if (ActiveTab == "logs")
+        {
+            <section class="rounded-xl border border-white/[.08] bg-[#0b121b] p-4 sm:p-5">
+                <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
+                    <div class="flex items-center gap-2.5">
+                        <span class="flex size-8 items-center justify-center rounded-lg border border-cyan-400/15 bg-cyan-400/[.04] text-cyan-300">📋</span>
+                        <div>
+                            <p class="text-[8px] tracking-[.14em] text-slate-600">MISSION RECORDS</p>
+                            <h2 class="text-[11px] font-semibold tracking-[.1em] text-slate-100">Flight surgeon diagnostic history</h2>
+                        </div>
+                    </div>
+
+                    <button type="button" @onclick="ExportLogsJson" disabled="@(Logs.Count == 0)"
+                            class="flex min-h-9 items-center gap-2 rounded-lg border border-cyan-300/25 bg-cyan-300/[.08] px-3.5 text-[9px] tracking-[.08em] text-cyan-100 hover:bg-cyan-300/[.14] disabled:opacity-40">
+                        ⬇ EXPORT MISSION LOG (JSON)
+                    </button>
+                </div>
+
+                @if (Logs.Count == 0)
+                {
+                    <div class="rounded-lg border border-dashed border-white/10 p-8 text-center">
+                        <p class="text-xs text-slate-500">No health logs submitted in this session yet.</p>
+                        <p class="mt-1 text-[9px] text-slate-600">Navigate to "Crew Vitals &amp; Check-In" to record the day’s indicators.</p>
+                    </div>
+                }
+                else
+                {
+                    <div class="grid gap-3">
+                        @foreach (var log in Logs)
+                        {
+                            <div class="rounded-lg border border-white/[.08] bg-[#080d14] p-4">
+                                <div class="mb-3 flex flex-wrap items-center justify-between gap-2 border-b border-white/[.06] pb-2">
+                                    <span class="font-mono text-[9px] text-cyan-400">@log.Timestamp</span>
+                                    <span class="rounded bg-white/[.05] px-2 py-0.5 text-[8px] text-slate-300">
+                                        Mood: @(string.IsNullOrWhiteSpace(log.Mood) ? "Not specified" : log.Mood)
+                                    </span>
+                                </div>
+                                <div class="grid gap-2 text-[10px] sm:grid-cols-3 md:grid-cols-6">
+                                    <p><span class="block text-[8px] text-slate-600">BP</span><span class="font-mono text-white">@log.BloodPressure mmHg</span></p>
+                                    <p><span class="block text-[8px] text-slate-600">HR</span><span class="font-mono text-white">@log.HeartRate BPM</span></p>
+                                    <p><span class="block text-[8px] text-slate-600">GLUCOSE</span><span class="font-mono text-white">@(string.IsNullOrWhiteSpace(log.BloodSugar) ? "—" : $"{log.BloodSugar} mg/dL")</span></p>
+                                    <p><span class="block text-[8px] text-slate-600">TEMP</span><span class="font-mono text-white">@(string.IsNullOrWhiteSpace(log.Temperature) ? "—" : $"{log.Temperature} °C")</span></p>
+                                    <p><span class="block text-[8px] text-slate-600">SLEEP</span><span class="font-mono text-white">@(string.IsNullOrWhiteSpace(log.Sleep) ? "—" : $"{log.Sleep} hrs")</span></p>
+                                    <p><span class="block text-[8px] text-slate-600">ACTIVITY</span><span class="font-mono text-white">@(string.IsNullOrWhiteSpace(log.Actigraphy) ? "—" : log.Actigraphy)</span></p>
+                                </div>
+                                @if (!string.IsNullOrWhiteSpace(log.Notes))
+                                {
+                                    <p class="mt-3 border-t border-white/[.04] pt-2 text-[9px] text-slate-400">Notes: @log.Notes</p>
+                                }
+                            </div>
+                        }
+                    </div>
+                }
+            </section>
+        }
+
+        <!-- TOAST NOTIFICATION -->
+        @if (SavedNotice)
+        {
+            <div role="status" aria-live="polite"
+                 class="fixed bottom-6 right-6 z-50 flex items-center gap-2 rounded-xl border border-emerald-400/30 bg-[#0b121b] px-4 py-3 text-xs text-emerald-200 shadow-2xl backdrop-blur-xl">
+                <span class="text-emerald-400">✓</span> Daily check-in saved successfully in session.
+            </div>
+        }
     </div>
 </main>
 
 @code {
-    [Inject] private TelemetryEngine Engine { get; set; } = default!;
-    private AstroHealthSnapshot _snapshot = new();
+    // --- STATE ---
+    private string UtcTime = DateTime.UtcNow.ToString("HH:mm:ss");
+    private int ElapsedSeconds = 184 * 86400 + 6 * 3600;
+    private string SelectedEnvironment = "spacecraft";
+    private string ActiveTab = "command";
+    private bool SolarEvent = false;
+    private bool MicrogravityShift = false;
+    private int LatencySeconds = 751;
+    private string SelectedRegion = "Musculoskeletal";
+    private bool SavedNotice = false;
+
+    private HealthLogEntry CurrentEntry = new();
+    private List<HealthLogEntry> Logs = new();
+    private List<MissionAlert> Alerts = new();
+    private List<TelemetrySample> Samples = new();
+
+    private PeriodicTimer? _secondTimer;
+    private CancellationTokenSource _cts = new();
+    private readonly Random _rng = new();
+    private int _tickCounter = 0;
+
+    private bool SolarEventActive = false;
+    private bool GravityShiftActive = false;
+    private bool LatencyShiftActive = false;
+
+    private int CriticalCount => SolarEventActive ? 1 : 0;
+    private int CautionCount => (GravityShiftActive ? 1 : 0) + (LatencyShiftActive ? 1 : 0);
+    private int TotalOpenAlerts => CriticalCount + CautionCount;
+
+    // --- COMPUTED PROPERTIES ---
+    private bool IsOffline => LatencySeconds >= 1200;
+    private int ActiveAlertCount => Alerts.Count(a => a.Tone != "green");
+    private string MasterTone => Alerts.Any(a => a.Tone == "red") ? "red" : Alerts.Any(a => a.Tone == "amber") ? "amber" : "green";
+    private string MissionElapsed => $"{ElapsedSeconds / 86400}d {(ElapsedSeconds % 86400) / 3600:D2}h {(ElapsedSeconds % 3600) / 60:D2}m";
+
+    private record EnvOption(string Value, string Label, int Latency);
+    private readonly List<EnvOption> EnvironmentOptions = new()
+    {
+        new("spacecraft", "SPACECRAFT", 751),
+        new("gateway", "LUNAR GATEWAY", 2),
+        new("mars-transit", "MARS TRANSIT", 1260),
+        new("surface-base", "SURFACE BASE", 1260)
+    };
+
+    private record TabItem(string Id, string Label, string ShortLabel, string Icon);
+    private readonly List<TabItem> Tabs = new()
+    {
+        new("command", "Command & Body Map", "COMMAND", "◎"),
+        new("vitals", "Crew Vitals & Check-In", "CREW VITALS", "❤️"),
+        new("telemetry", "Telemetry & Trends", "TELEMETRY", "📈"),
+        new("logs", "Flight Surgeon Logs", "SURGEON LOGS", "🛡️")
+    };
+
+    private record MapButton(string Name, string Short, string Position, string Icon);
+    private readonly List<MapButton> MapButtons = new()
+    {
+        new("Cardiovascular", "CARDIO", "left-[18%] top-[25%]", "❤️"),
+        new("Musculoskeletal", "BONE", "right-[15%] top-[47%]", "🦴"),
+        new("Ocular / vision", "VISION", "left-[11%] top-[9%]", "👁️"),
+        new("CNS / behavioral", "CNS", "right-[13%] top-[19%]", "🧠")
+    };
+
+    private record RegionDetail(string Icon, string Status, string Summary, string Impact, string Action);
+    private readonly Dictionary<string, RegionDetail> RegionDetails = new()
+    {
+        ["Cardiovascular"] = new("❤️", "green", "Cardiac rhythm and circulation stable.",
+            "Microgravity redistributes fluids toward the thorax and head, altering cardiac preload and orthostatic tolerance.",
+            "Continue prescribed aerobic conditioning; report dizziness or unusual exercise intolerance to the flight surgeon."),
+        ["Musculoskeletal"] = new("🦴", "amber", "Bone density trend requires follow-up.",
+            "Without weight-bearing load, lower-limb bone resorption may exceed formation during long-duration flight.",
+            "Complete the prescribed resistance session and hydration plan; review the trend with the flight surgeon."),
+        ["Ocular / vision"] = new("👁️", "amber", "Vision check-in due this mission week.",
+            "Headward fluid shifts can contribute to ocular changes; radiation exposure may increase long-term cellular stress.",
+            "Log vision changes and complete scheduled ocular checks; promptly report persistent symptoms."),
+        ["CNS / behavioral"] = new("🧠", "green", "Mood and sleep indicators within crew baseline.",
+            "Confinement, circadian disruption, and communication delay can affect sleep, attention, and team dynamics.",
+            "Keep the sleep schedule, use the private check-in, and flag sustained mood or concentration changes.")
+    };
 
     protected override void OnInitialized()
     {
-        _snapshot = Engine.CurrentSnapshot;
-        Engine.OnTelemetryUpdated += OnTelemetryTick;
-        Engine.Start();
-    }
-
-    private void OnTelemetryTick(AstroHealthSnapshot updatedSnapshot)
-    {
-        InvokeAsync(() =>
+        Alerts = new()
         {
-            _snapshot = updatedSnapshot;
-            StateHasChanged();
-        });
-    }
-
-    private void TriggerSpe()
-    {
-        Engine.SetSolarParticleEvent(!_snapshot.SpaceRadiation.SolarParticleEventActive);
-    }
-
-    private void CycleGravity()
-    {
-        var nextMode = _snapshot.GravityFields.CurrentGravityMode switch
-        {
-            GravityMode.ZeroG => GravityMode.MarsOneThirdG,
-            GravityMode.MarsOneThirdG => GravityMode.EarthOneG,
-            GravityMode.EarthOneG => GravityMode.ZeroG,
-            _ => GravityMode.ZeroG
-        };
-        Engine.SetGravityMode(nextMode);
-    }
-
-    private void ToggleLight()
-    {
-        Engine.ToggleLightTherapy();
-    }
-
-    private async Task ExportMissionLog()
-    {
-        var exportPackage = new
-        {
-            Mission = "NASA Space Apps Challenge - AstroPulse",
-            ExportTimestampUtc = DateTime.UtcNow,
-            TotalRecords = Engine.SnapshotHistory.Count,
-            HistoricalTelemetry = Engine.SnapshotHistory,
-            ComplianceStandards = new[] { "NASA-STD-3001 Vol 1 & 2", "NASA HRP Physiological Hazards", "CSA CANS Neutron Spectrometer" }
+            new("red", "14:32:08", "Radiation spike detected", "Neutron flux exceeded nominal threshold by 18%. Increase shielding posture.", "SHELTER IN STORM CELLAR"),
+            new("amber", "14:28:41", "Bone mineral density trend", "Crew member 02: projected loss rate at 1.4% / month. Countermeasure window open.", "SCHEDULE RESISTANCE SESSION"),
+            new("green", "14:21:16", "EVA suit pressure stable", "All pressure seals nominal. Suit telemetry synchronized with Houston.", "NO ACTION REQUIRED")
         };
 
-        var json = JsonSerializer.Serialize(exportPackage, new JsonSerializerOptions { WriteIndented = true });
-        var base64Bytes = Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(json));
-        var fileName = $"AstroPulse_FullMissionLog_{DateTime.UtcNow:yyyyMMdd_HHmmss}.json";
+        for (int i = 0; i < 60; i++)
+        {
+            Samples.Add(new TelemetrySample
+            {
+                Pressure = 101.2 + Math.Sin(i / 6.0) * 0.18,
+                Temperature = 21.8 + Math.Cos(i / 8.0) * 0.12,
+                Acoustics = 56.1 + Math.Sin(i / 3.0) * 1.5,
+                Radiation = 0.53 + Math.Abs(Math.Sin(i / 4.0)) * 0.08
+            });
+        }
+
+        _ = RunTelemetryLoopAsync();
+    }
+
+    private async Task RunTelemetryLoopAsync()
+    {
+        _secondTimer = new PeriodicTimer(TimeSpan.FromSeconds(1));
+        try
+        {
+            while (await _secondTimer.WaitForNextTickAsync(_cts.Token))
+            {
+                UtcTime = DateTime.UtcNow.ToString("HH:mm:ss");
+                ElapsedSeconds++;
+                _tickCounter++;
+
+                if (_tickCounter % 3 == 0) // Faster stream updates for organic graph motion
+                {
+                    if (Samples.Count >= 60) Samples.RemoveAt(0);
+                    
+                    double baseRad = SolarEvent ? 35.0 + (_rng.NextDouble() * 15.0) : 0.52 + (_rng.NextDouble() * 0.06);
+                    double baseAcoustics = MicrogravityShift ? 62.4 + (_rng.NextDouble() - 0.5) * 3.0 : 56.0 + (_rng.NextDouble() - 0.5) * 1.8;
+
+                    Samples.Add(new TelemetrySample
+                    {
+                        Pressure = 101.2 + Math.Sin(_tickCounter / 5.0) * 0.22 + (_rng.NextDouble() - 0.5) * 0.08,
+                        Temperature = 21.81 + Math.Cos(_tickCounter / 7.0) * 0.15 + (_rng.NextDouble() - 0.5) * 0.05,
+                        Acoustics = baseAcoustics,
+                        Radiation = baseRad
+                    });
+                }
+
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (OperationCanceledException) { }
+    }
+
+    private void AppendAlert(string title, string body, string tone, string action)
+    {
+        Alerts.Insert(0, new MissionAlert(tone, DateTime.UtcNow.ToString("HH:mm:ss"), title, body, action));
+        if (Alerts.Count > 40) Alerts.RemoveAt(Alerts.Count - 1);
+    }
+
+    private void OnEnvironmentChanged(ChangeEventArgs e)
+    {
+        SelectedEnvironment = e.Value?.ToString() ?? "spacecraft";
+        var opt = EnvironmentOptions.First(o => o.Value == SelectedEnvironment);
+        LatencySeconds = opt.Latency;
+        AppendAlert("Mission environment changed", $"Simulation environment set to {opt.Label}.", "amber", "REVIEW ENVIRONMENT PROFILE");
+    }
+
+    private void ToggleLatency()
+    {
+        var baseLat = EnvironmentOptions.First(o => o.Value == SelectedEnvironment).Latency;
+        if (!IsOffline)
+        {
+            LatencySeconds = Math.Max(baseLat, 1260);
+            AppendAlert("Earth link beyond autonomous threshold", "One-way delay exceeds 20 minutes. Local crew guidance is active.", "amber", "FOLLOW LOCAL ADVISORY");
+        }
+        else
+        {
+            LatencySeconds = baseLat;
+            AppendAlert("Earth link restored to nominal delay", "One-way delay is below the 20-minute autonomy threshold.", "green", "EARTH LINK AVAILABLE");
+        }
+    }
+
+    private void ToggleSolarEvent()
+    {
+        SolarEventActive = !SolarEventActive;
+        SolarEvent = SolarEventActive;
+        if (SolarEventActive)
+        {
+            AppendAlert("Radiation spike detected", "Neutron flux exceeded nominal threshold. Critical solar particle event active.", "red", "SHELTER IN STORM CELLAR");
+        }
+        else
+        {
+            Alerts.RemoveAll(a => a.Title.Contains("Radiation") || a.Title.Contains("solar", StringComparison.OrdinalIgnoreCase));
+            AppendAlert("Solar particle event simulation reset", "Simulated neutron flux returned to baseline conditions.", "green", "MONITOR SENSOR TREND");
+        }
+    }
+
+    private void ToggleMicrogravity()
+    {
+        GravityShiftActive = !GravityShiftActive;
+        MicrogravityShift = GravityShiftActive;
+        if (GravityShiftActive)
+        {
+            AppendAlert("Microgravity shift simulated", "Gravity simulation shifted to microgravity. Review balance and fluid-shift protocols.", "amber", "REVIEW CREW ADAPTATION");
+        }
+        else
+        {
+            Alerts.RemoveAll(a => a.Title.Contains("Gravity") || a.Title.Contains("Microgravity", StringComparison.OrdinalIgnoreCase));
+            AppendAlert("Gravity profile restored", "Gravity simulation returned to the nominal environment profile.", "green", "PROFILE RESTORED");
+        }
+    }
+
+    private void ToggleLatencySimulation()
+    {
+        LatencyShiftActive = !LatencyShiftActive;
+        if (LatencyShiftActive)
+        {
+            AppendAlert("High latency simulated", "One-way delay exceeds 20-minute autonomy threshold.", "amber", "REVIEW EDGE ADVISOR");
+        }
+        else
+        {
+            Alerts.RemoveAll(a => a.Title.Contains("latency") || a.Title.Contains("delay", StringComparison.OrdinalIgnoreCase));
+            AppendAlert("Earth link restored to nominal delay", "One-way delay is below the 20-minute autonomy threshold.", "green", "EARTH LINK AVAILABLE");
+        }
+    }
+
+    private string GetAlertBadgeStyle()
+    {
+        if (CriticalCount > 0)
+            return "bg-rose-400/15 text-rose-300 border border-rose-400/30 shadow-[0_0_10px_rgba(251,113,133,.25)] animate-pulse";
+        if (CautionCount > 0)
+            return "bg-amber-400/15 text-amber-300 border border-amber-400/30";
+        return "bg-emerald-400/15 text-emerald-300 border border-emerald-400/30";
+    }
+
+    private async Task SaveHealthLog()
+    {
+        CurrentEntry.Timestamp = DateTime.UtcNow.ToString("yyyy-MM-dd HH:mm:ss") + "Z";
+        Logs.Insert(0, CurrentEntry);
+        CurrentEntry = new HealthLogEntry();
+        SavedNotice = true;
+        StateHasChanged();
+
+        await Task.Delay(3500);
+        SavedNotice = false;
+        StateHasChanged();
+    }
+
+    private async Task ExportLogsJson()
+    {
+        var payload = new
+        {
+            schema = "astropulse.mission-health-log.v1",
+            exportedAt = DateTime.UtcNow.ToString("o"),
+            mission = "ARTEMIS DEEP SPACE SIM",
+            environment = SelectedEnvironment,
+            healthEntries = Logs,
+            alerts = Alerts
+        };
+        var json = JsonSerializer.Serialize(payload, new JsonSerializerOptions { WriteIndented = true });
+        var fileName = $"astropulse-health-log-{DateTime.UtcNow:yyyy-MM-dd}.json";
 
         await JS.InvokeVoidAsync("eval", $@"
-            const bs = '{base64Bytes}';
-            const bin = atob(bs);
-            const buf = new Uint8Array(bin.length);
-            for (let i = 0; i < bin.length; i++) {{ buf[i] = bin.charCodeAt(i); }}
-            const blob = new Blob([buf], {{ type: 'application/json' }});
+            const blob = new Blob([{JsonSerializer.Serialize(json)}], {{ type: 'application/json' }});
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
             a.download = '{fileName}';
-            document.body.appendChild(a);
             a.click();
-            document.body.removeChild(a);
             URL.revokeObjectURL(url);
         ");
     }
 
-    private string GetAlertCardClass(AlertSeverity severity) => severity switch
+    // --- HIGH-PRECISION DYNAMIC SPARKLINE RENDER HELPER MATCHING SCREENSHOT ---
+    private RenderFragment RenderChartCard(string label, string unit, string color, double min, double max, Func<TelemetrySample, double> selector, string format, string dotTone) => __builder =>
     {
-        AlertSeverity.Critical => "border-red-400/20 bg-red-400/[.035] text-red-200",
-        AlertSeverity.Warning => "border-amber-400/15 bg-amber-400/[.025] text-amber-200",
-        _ => "border-emerald-400/15 bg-emerald-400/[.025] text-emerald-200"
+        var latest = Samples.LastOrDefault() is { } last ? selector(last) : 0;
+        var points = string.Join(" ", Samples.Select((s, i) =>
+        {
+            var pct = Math.Clamp((selector(s) - min) / (max - min), 0.0, 1.0) * 100.0;
+            var x = (i / Math.Max(Samples.Count - 1.0, 1.0)) * 100.0;
+            var y = 38.0 - (pct / 100.0) * 34.0;
+            return $"{x:F1},{y:F1}";
+        }));
+
+        <div class="rounded-xl border border-white/[.07] bg-[#080d14] p-4 relative">
+            <div class="flex items-center justify-between">
+                <p class="text-[9px] tracking-[.1em] text-slate-500">@label</p>
+                <span class="size-2 rounded-full @GetToneFill(dotTone) @(dotTone == "red" ? "animate-pulse shadow-[0_0_8px_#fb7185]" : "")"></span>
+            </div>
+            <div class="mt-2 flex items-baseline gap-2">
+                <span class="font-mono text-2xl text-white">@latest.ToString(format)</span>
+                <span class="text-[9px] text-slate-600">@unit</span>
+            </div>
+            <svg viewBox="0 0 100 40" preserveAspectRatio="none" class="mt-3 h-16 w-full">
+                <polyline points="@points" fill="none" stroke="@color" stroke-width="1.8" vector-effect="non-scaling-stroke" />
+            </svg>
+            <div class="mt-2 flex justify-between text-[8px] text-slate-700">
+                <span>−300 SEC</span>
+                <span>LIVE</span>
+            </div>
+        </div>
     };
 
-    private string GetSeverityDotClass(AlertSeverity severity) => severity switch
+    private string GetToneBorder(string tone) => tone switch { "red" => "border-rose-400/25", "amber" => "border-amber-400/20", _ => "border-emerald-400/20" };
+    private string GetToneFill(string tone) => tone switch { "red" => "bg-rose-400", "amber" => "bg-amber-400", "cyan" => "bg-cyan-400", _ => "bg-emerald-400" };
+    private string GetToneBadge(string tone) => tone switch { "red" => "bg-rose-400/10 text-rose-300", "amber" => "bg-amber-400/10 text-amber-300", _ => "bg-emerald-400/10 text-emerald-300" };
+    private string GetToneGlow(string tone) => tone switch { "red" => "shadow-[0_0_10px_#fb7185]", "amber" => "shadow-[0_0_10px_#fbbf24]", _ => "shadow-[0_0_10px_#34d399]" };
+
+    private record MissionAlert(string Tone, string Time, string Title, string Body, string Action);
+
+    private class TelemetrySample
     {
-        AlertSeverity.Critical => "bg-red-400 shadow-[0_0_10px_#fb7185]",
-        AlertSeverity.Warning => "bg-amber-400 shadow-[0_0_10px_#fbbf24]",
-        _ => "bg-emerald-400 shadow-[0_0_10px_#34d399]"
-    };
+        public double Pressure { get; set; }
+        public double Temperature { get; set; }
+        public double Acoustics { get; set; }
+        public double Radiation { get; set; }
+    }
+
+    private class HealthLogEntry
+    {
+        public string Timestamp { get; set; } = "";
+        public string BloodPressure { get; set; } = "";
+        public string HeartRate { get; set; } = "";
+        public string BloodSugar { get; set; } = "";
+        public string Temperature { get; set; } = "";
+        public string Sleep { get; set; } = "";
+        public string Actigraphy { get; set; } = "";
+        public string Mood { get; set; } = "";
+        public string Notes { get; set; } = "";
+    }
 
     public void Dispose()
     {
-        Engine.OnTelemetryUpdated -= OnTelemetryTick;
+        _cts.Cancel();
+        _secondTimer?.Dispose();
+        _cts.Dispose();
     }
 }
+```[cite: 2]
