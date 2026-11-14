@@ -4,6 +4,10 @@
 @implements IDisposable
 @inject IJSRuntime JS
 
+<audio id="alertSound" preload="auto">
+    <source src="audio/alert.mp3" type="audio/mpeg" />
+</audio>
+
 <PageTitle>AstroPulse | Human Spaceflight Monitor</PageTitle>
 
 <main class="min-h-screen bg-[#070b11] text-slate-300 selection:bg-cyan-400/20">
@@ -268,6 +272,10 @@
                         }
                     </div>
                 </section>
+
+                <audio id="alertSound" preload="auto">
+                    <source src="audio/alert.mp3" type="audio/mpeg" />
+                </audio>
 
                 <!-- NASA HRP FIVE HAZARDS -->
                 <section class="rounded-xl border border-white/[.08] bg-[#0b121b] p-4">
@@ -607,6 +615,28 @@
             "Keep the sleep schedule, use the private check-in, and flag sustained mood or concentration changes.")
     };
 
+    private async Task ControlAudio(bool play)
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("eval", @"
+            var audio = document.getElementById('alertSound');
+            if (audio) {
+                if (" + (play ? "true" : "false") + @") {
+                    audio.currentTime = 0;
+                    audio.play();
+                } else {
+                    audio.pause();
+                    audio.currentTime = 0;
+                }
+            }
+        ");
+        }
+        catch
+        {
+        }
+    }
+
     protected override void OnInitialized()
     {
         Alerts = new()
@@ -677,49 +707,65 @@
         AppendAlert("Mission environment changed", $"Simulation environment set to {opt.Label}.", "amber", "REVIEW ENVIRONMENT PROFILE");
     }
 
-    private void ToggleLatency()
+    private bool LatencyActive = false; 
+
+    private async Task ToggleLatency()
     {
+        LatencyActive = !LatencyActive;
         var baseLat = EnvironmentOptions.First(o => o.Value == SelectedEnvironment).Latency;
-        if (!IsOffline)
+    
+        if (LatencyActive)
         {
             LatencySeconds = Math.Max(baseLat, 1260);
             AppendAlert("Earth link beyond autonomous threshold", "One-way delay exceeds 20 minutes. Local crew guidance is active.", "amber", "FOLLOW LOCAL ADVISORY");
+            await ControlAudio(true);
         }
         else
         {
             LatencySeconds = baseLat;
+            Alerts.RemoveAll(a => a.Title.Contains("Latency", StringComparison.OrdinalIgnoreCase) || a.Title.Contains("Earth link", StringComparison.OrdinalIgnoreCase));
             AppendAlert("Earth link restored to nominal delay", "One-way delay is below the 20-minute autonomy threshold.", "green", "EARTH LINK AVAILABLE");
+            await ControlAudio(false);
         }
+        StateHasChanged(); 
     }
 
-    private void ToggleSolarEvent()
+    private async Task ToggleSolarEvent()
     {
         SolarEventActive = !SolarEventActive;
         SolarEvent = SolarEventActive;
+    
         if (SolarEventActive)
         {
             AppendAlert("Radiation spike detected", "Neutron flux exceeded nominal threshold. Critical solar particle event active.", "red", "SHELTER IN STORM CELLAR");
+            await ControlAudio(true);
         }
         else
         {
             Alerts.RemoveAll(a => a.Title.Contains("Radiation") || a.Title.Contains("solar", StringComparison.OrdinalIgnoreCase));
             AppendAlert("Solar particle event simulation reset", "Simulated neutron flux returned to baseline conditions.", "green", "MONITOR SENSOR TREND");
+            await ControlAudio(false);
         }
+        StateHasChanged();
     }
 
-    private void ToggleMicrogravity()
+    private async Task ToggleMicrogravity()
     {
         GravityShiftActive = !GravityShiftActive;
         MicrogravityShift = GravityShiftActive;
+    
         if (GravityShiftActive)
         {
             AppendAlert("Microgravity shift simulated", "Gravity simulation shifted to microgravity. Review balance and fluid-shift protocols.", "amber", "REVIEW CREW ADAPTATION");
+            await ControlAudio(true);
         }
         else
         {
             Alerts.RemoveAll(a => a.Title.Contains("Gravity") || a.Title.Contains("Microgravity", StringComparison.OrdinalIgnoreCase));
             AppendAlert("Gravity profile restored", "Gravity simulation returned to the nominal environment profile.", "green", "PROFILE RESTORED");
+            await ControlAudio(false);
         }
+        StateHasChanged();
     }
 
     private void ToggleLatencySimulation()
