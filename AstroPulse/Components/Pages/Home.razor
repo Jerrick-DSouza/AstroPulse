@@ -1,8 +1,10 @@
 ﻿@page "/"
 @rendermode InteractiveServer
 @using System.Text.Json
+@using AstroPulse.Models
 @implements IDisposable
 @inject IJSRuntime JS
+@inject TelemetryEngine Telemetry
 
 <PageTitle>AstroPulse | Human Spaceflight Monitor</PageTitle>
 
